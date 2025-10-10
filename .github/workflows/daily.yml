@@ -2,9 +2,9 @@ name: Daily Telegram Updates
 
 on:
   schedule:
-    - cron: '0 3 * * *'     # 8:30 AM IST
-    - cron: '0 15 * * *'    # 8:30 PM IST
-  workflow_dispatch: {}      # allows manual run
+    - cron: '0 3 * * *'     # 08:30 AM IST
+    - cron: '0 15 * * *'    # 08:30 PM IST
+  workflow_dispatch: {}      # allows manual run from Actions tab
 
 jobs:
   run-bot:
@@ -18,16 +18,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: pip install requests feedparser beautifulsoup4
 
-      - name: Run daily bot
+      - name: Run daily bot (debug output)
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python daily_bot.py
+        run: |
+          echo "Starting daily_bot.py..."
+          python -u daily_bot.py
 
       - name: Commit seen.json if updated
         run: |
@@ -35,7 +37,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [ -n "$(git status --porcelain)" ]; then
             git add seen.json || true
-            git commit -m "update seen.json" || true
+            git commit -m "chore: update seen.json" || true
             git push
           else
             echo "No changes to commit"
