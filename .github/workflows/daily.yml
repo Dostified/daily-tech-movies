@@ -21,7 +21,8 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests feedparser
+  run: pip install requests feedparser beautifulsoup4
+
 
       - name: Run daily bot
         env:
