@@ -3,6 +3,7 @@ import json
 import requests
 import feedparser
 from datetime import datetime, timedelta, timezone
+import re
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -20,8 +21,27 @@ RSS_FEEDS = [
     "https://www.bollywoodhungama.com/feed/"
 ]
 KEYWORDS = ["launch", "review", "update", "leak", "AI", "movie", "trailer", "Apple", "Samsung", "Android"]
-MAX_ITEMS = 12
+MAX_ITEMS = 10   # number of items per message
 SEEN_FILE = "seen.json"
+
+# --- simple summarizer: try feed summary -> first 2 sentences or trim to limit
+def short_summary_from_text(text, max_chars=220, max_sentences=2):
+    if not text:
+        return ""
+    # remove HTML tags if any
+    text = re.sub('<[^<]+?>', '', text).strip()
+    # normalize whitespace
+    text = re.sub(r'\s+', ' ', text)
+    # try split into sentences naively
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    if len(sentences) >= 1:
+        summary = ' '.join(sentences[:max_sentences]).strip()
+    else:
+        summary = text[:max_chars]
+    if len(summary) > max_chars:
+        # trim without breaking words
+        summary = summary[:max_chars].rsplit(' ', 1)[0] + "..."
+    return summary
 
 def load_seen():
     if os.path.exists(SEEN_FILE):
@@ -47,12 +67,19 @@ def collect_items():
                 title = entry.get("title", "").strip()
                 link = entry.get("link", "").strip()
                 guid = link or entry.get("id") or title
-                text_for_match = (title + " " + entry.get("summary", "")).lower()
+                raw_summary = entry.get("summary", "") or entry.get("description", "") or ""
+                text_for_match = (title + " " + raw_summary).lower()
                 if not any(k.lower() in text_for_match for k in KEYWORDS):
                     continue
                 if guid in seen:
                     continue
-                items.append((title, link, guid))
+                summary_short = short_summary_from_text(raw_summary or title)
+                items.append({
+                    "title": title,
+                    "link": link,
+                    "guid": guid,
+                    "summary": summary_short
+                })
                 new_guids.append(guid)
                 if len(items) >= MAX_ITEMS:
                     break
@@ -69,8 +96,14 @@ def build_message(items):
     if not items:
         return header + "No new updates right now."
     lines = []
-    for t, l, _ in items:
-        lines.append(f"• {t}\n{l}")
+    for it in items:
+        title = it.get("title", "")
+        link = it.get("link", "")
+        summary = it.get("summary", "")
+        if summary:
+            lines.append(f"• {title}\n{summary}\n{link}")
+        else:
+            lines.append(f"• {title}\n{link}")
     body = "\n\n".join(lines)
     msg = header + body
     if len(msg) > 3900:
@@ -79,22 +112,4 @@ def build_message(items):
 
 def send_telegram(text):
     if not BOT_TOKEN or not CHAT_ID:
-        raise SystemExit("Missing BOT_TOKEN or CHAT_ID")
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text, "disable_web_page_preview": True}
-    r = requests.post(url, data=payload, timeout=30)
-    r.raise_for_status()
-    return r.json()
-
-def main():
-    items, new_guids = collect_items()
-    msg = build_message(items)
-    send_telegram(msg)
-    if new_guids:
-        seen = load_seen()
-        seen.extend(new_guids)
-        seen = seen[-500:]
-        save_seen(seen)
-
-if __name__ == "__main__":
-    main()
+        ra
